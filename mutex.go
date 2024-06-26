@@ -67,20 +67,30 @@ func getCaller() (string, int) {
 
 func monitor() {
 	for {
-		time.Sleep(time.Millisecond * 100)
+		mu.Lock()
+		timeoutV := lockTimeout // global
+		mu.Unlock()
+
+		if timeoutV > time.Millisecond*50 {
+			time.Sleep(timeoutV / 3)
+		} else {
+			time.Sleep(time.Millisecond * 300)
+		}
+
 		alerted := []interface{}{}
+		now := time.Now()
 		waitingMutexes.Range(func(k, v interface{}) bool {
 			m := k.(*RWMutex)
 			info := v.(*lockInfo)
 
-			spent := time.Since(info.lockTime)
+			spent := now.Sub(info.lockTime)
 
-			timeout := lockTimeout // global
+			timeout := timeoutV
 			if m.lockTimeout > 0 {
 				timeout = m.lockTimeout // custom
 			}
 
-			if spent > timeout {
+			if spent > timeout && timeout > 0 {
 				mu.Lock()
 				lockTimeoutHandlerV := lockTimeoutHandler
 				mu.Unlock()
@@ -88,10 +98,12 @@ func monitor() {
 					lockTimeoutHandlerV = m.lockTimeoutHandler
 				}
 
-				// who locked?
-				file, line, _ := m.LastLocker()
+				if lockTimeoutHandlerV != nil {
+					// who locked?
+					file, line, _ := m.LastLocker()
 
-				lockTimeoutHandlerV(spent, file, line)
+					lockTimeoutHandlerV(spent, file, line)
+				}
 				alerted = append(alerted, k)
 			}
 			return true
@@ -198,6 +210,10 @@ func (m *RWMutex) SetLockTimeout(duration time.Duration, handler func(dur time.D
 	m.lockTimeoutHandler = handler
 }
 
+func (m *RWMutex) GetLockTimeout() time.Duration {
+	return m.lockTimeout
+}
+
 // SetGlobalLockTimeout sets the global lock timeout and handler
 // if handler == nil or duration == 0, checking is turned off
 func SetGlobalLockTimeout(duration time.Duration, handler func(dur time.Duration, file string, line int)) {
@@ -205,4 +221,10 @@ func SetGlobalLockTimeout(duration time.Duration, handler func(dur time.Duration
 	lockTimeout = duration
 	lockTimeoutHandler = handler
 	mu.Unlock()
+}
+
+func GetGlobalLockTimeout() time.Duration {
+	mu.Lock()
+	defer mu.Unlock()
+	return lockTimeout
 }

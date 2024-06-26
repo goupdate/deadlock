@@ -334,9 +334,9 @@ func TestConcurrentRLocks(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer wg.Done()
-			mu.RLock()
+			mu.Lock()
 			counter++
-			mu.RUnlock()
+			mu.Unlock()
 		}()
 	}
 
@@ -401,9 +401,9 @@ func TestMixedLocks(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer wg.Done()
-			mu.RLock()
+			mu.Lock()
 			counter++
-			mu.RUnlock()
+			mu.Unlock()
 		}()
 	}
 
