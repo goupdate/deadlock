@@ -37,23 +37,23 @@ var (
 		fmt.Fprintf(os.Stderr, "RWMutex in %s: %d is locked more %s\n", file, line, dur.Truncate(time.Second).String())
 	}
 
-	globalTimers sync.Map
+	waitingMutexes sync.Map // *RWMutex -> *lockInfo
 
 	mu sync.Mutex
 )
 
+func init() {
+	go monitor()
+}
+
 func ResetGlobalTimers() {
-	reseted := []interface{}{}
-	globalTimers.Range(func(k, v interface{}) bool {
-		t := k.(*time.Timer)
-		if !t.Stop() {
-			<-t.C
-		}
-		reseted = append(reseted, t)
+	reset := []interface{}{}
+	waitingMutexes.Range(func(k, _ interface{}) bool {
+		reset = append(reset, k)
 		return true
 	})
-	for _, v := range reseted {
-		globalTimers.Delete(v)
+	for _, v := range reset {
+		waitingMutexes.Delete(v)
 	}
 }
 
@@ -65,29 +65,39 @@ func getCaller() (string, int) {
 	return file, line
 }
 
-func monitor(timer *time.Timer, info *lockInfo, m *RWMutex) {
-	for range timer.C {
-		spent := time.Since(info.lockTime)
+func monitor() {
+	for {
+		time.Sleep(time.Millisecond * 100)
+		alerted := []interface{}{}
+		waitingMutexes.Range(func(k, v interface{}) bool {
+			m := k.(*RWMutex)
+			info := v.(*lockInfo)
 
-		timeout := lockTimeout // global
-		if m.lockTimeout > 0 {
-			timeout = m.lockTimeout // custom
-		}
+			spent := time.Since(info.lockTime)
 
-		if spent > timeout {
-			mu.Lock()
-			lockTimeoutHandlerV := lockTimeoutHandler
-			mu.Unlock()
-			if m.lockTimeoutHandler != nil {
-				lockTimeoutHandlerV = m.lockTimeoutHandler
+			timeout := lockTimeout // global
+			if m.lockTimeout > 0 {
+				timeout = m.lockTimeout // custom
 			}
 
-			// who locked?
-			file, line, _ := m.LastLocker()
+			if spent > timeout {
+				mu.Lock()
+				lockTimeoutHandlerV := lockTimeoutHandler
+				mu.Unlock()
+				if m.lockTimeoutHandler != nil {
+					lockTimeoutHandlerV = m.lockTimeoutHandler
+				}
 
-			lockTimeoutHandlerV(spent, file, line)
+				// who locked?
+				file, line, _ := m.LastLocker()
 
-			timer.Stop()
+				lockTimeoutHandlerV(spent, file, line)
+				alerted = append(alerted, k)
+			}
+			return true
+		})
+		for _, k := range alerted {
+			waitingMutexes.Delete(k)
 		}
 	}
 }
@@ -135,26 +145,12 @@ func (m *RWMutex) Lock() {
 	}
 
 	info := &lockInfo{goid: goid, file: file, line: line, lockTime: time.Now()}
-	timeout := m.lockTimeout
-	if timeout == 0 {
-		timeout = lockTimeout
-	}
-	var timer *time.Timer
-	if timeout > 0 {
-		timer = time.NewTimer(timeout)
-		go monitor(timer, info, m)
-		globalTimers.Store(timer, 1)
-	}
+	waitingMutexes.Store(m, info)
 
 	m.RWMutex.Lock()
 	m.wlockInfo.Store(goid, info)
 
-	if timer != nil {
-		if !timer.Stop() {
-			<-timer.C
-		}
-		globalTimers.Delete(timer)
-	}
+	waitingMutexes.Delete(m)
 }
 
 // Unlock method
@@ -179,26 +175,12 @@ func (m *RWMutex) RLock() {
 	}
 
 	info := &lockInfo{goid: goid, file: file, line: line, lockTime: time.Now()}
-	timeout := m.lockTimeout
-	if timeout == 0 {
-		timeout = lockTimeout
-	}
-	var timer *time.Timer
-	if timeout > 0 {
-		timer = time.NewTimer(timeout)
-		go monitor(timer, info, m)
-		globalTimers.Store(timer, 1)
-	}
+	waitingMutexes.Store(m, info)
 
 	m.RWMutex.RLock()
 	m.rlockInfo.Store(goid, info)
 
-	if timer != nil {
-		if !timer.Stop() {
-			<-timer.C
-		}
-		globalTimers.Delete(timer)
-	}
+	waitingMutexes.Delete(m)
 }
 
 // RUnlock method
