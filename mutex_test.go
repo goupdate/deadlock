@@ -92,13 +92,13 @@ func TestDeadlockDetection2(t *testing.T) {
 	pan := make(chan interface{})
 	done := false
 
-	deadlock.SetGlobalLockTimeout(time.Second*2, func(dur time.Duration, file string, line int) {
+	deadlock.SetGlobalLockTimeout(time.Second*5, func(dur time.Duration, file string, line int) {
 		if !done {
 			t.Fatal("should not be triggered")
 		}
 	})
 
-	mu1.SetLockTimeout(time.Second, func(dur time.Duration, file string, line int) {
+	mu1.SetLockTimeout(time.Millisecond*400, func(dur time.Duration, file string, line int) {
 		done = true
 		go func() {
 			str := fmt.Sprintf("rwmutex hangs: %s at %s:%d", dur.String(), file, line)

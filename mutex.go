@@ -71,8 +71,8 @@ func monitor() {
 		timeoutV := lockTimeout // global
 		mu.Unlock()
 
-		if timeoutV > time.Millisecond*50 {
-			time.Sleep(timeoutV / 3)
+		if timeoutV < time.Second && timeoutV > time.Millisecond*100 {
+			time.Sleep(timeoutV / 2)
 		} else {
 			time.Sleep(time.Millisecond * 300)
 		}
