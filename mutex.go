@@ -227,11 +227,3 @@ func GetGlobalLockTimeout() time.Duration {
 	defer mu.Unlock()
 	return lockTimeout
 }
-
-type GoroutineID int64
-
-var lastId int64 = 1
-
-func GetGoroutineId() GoroutineID {
-	return GoroutineID(atomic.AddInt64(&lastId, 1))
-}
