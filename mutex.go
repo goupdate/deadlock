@@ -5,9 +5,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
-	// "github.com/petermattis/goid"
 )
 
 type lockInfo struct {
@@ -137,8 +135,8 @@ func (m *RWMutex) LastLocker() (string, int, time.Duration) {
 }
 
 // Lock method with deadlock detection and timeout handling
+// goid from GetGoroutineId() !
 func (m *RWMutex) Lock(goid GoroutineID) {
-	//goid := goid.Get()
 	file, line := getCaller()
 
 	// forbid Lock() after Lock() in same goroutine
@@ -166,15 +164,15 @@ func (m *RWMutex) Lock(goid GoroutineID) {
 }
 
 // Unlock method
+// goid from GetGoroutineId() !
 func (m *RWMutex) Unlock(goid GoroutineID) {
-	//	goid := goid.Get()
 	m.wlockInfo.Delete(goid)
 	m.RWMutex.Unlock()
 }
 
 // RLock method with deadlock detection and timeout handling
+// goid from GetGoroutineId() !
 func (m *RWMutex) RLock(goid GoroutineID) {
-	//goid := goid.Get()
 	file, line := getCaller()
 
 	// forbid RLock() after Lock() in same goroutine
@@ -195,9 +193,8 @@ func (m *RWMutex) RLock(goid GoroutineID) {
 }
 
 // RUnlock method
+// goid from GetGoroutineId() !
 func (m *RWMutex) RUnlock(goid GoroutineID) {
-	//goid := goid.Get()
-
 	m.rlockInfo.Delete(goid)
 	m.RWMutex.RUnlock()
 }

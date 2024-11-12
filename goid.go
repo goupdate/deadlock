@@ -1,5 +1,9 @@
 package deadlock
 
+import (
+	"sync/atomic"
+)
+
 type GoroutineID int64
 
 var lastId int64 = 1
