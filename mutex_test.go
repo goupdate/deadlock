@@ -1,30 +1,30 @@
-package deadlock_test
+package deadlock
 
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/goupdate/deadlock"
 )
 
 func TestLockUnlock(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 
-	mu.Lock()
-	mu.Unlock()
+	goid := GetGoroutineId()
 
-	mu.RLock()
-	mu.RUnlock()
+	mu.Lock(goid)
+	mu.Unlock(goid)
+
+	mu.RLock(goid)
+	mu.RUnlock(goid)
 }
 
 func TestDeadlockDetection(t *testing.T) {
-	var mu1, mu2, mu3 deadlock.RWMutex
-
+	var mu1, mu2, mu3 RWMutex
 	pan := make(chan interface{})
 
-	deadlock.SetGlobalLockTimeout(time.Second, func(dur time.Duration, file string, line int) {
+	SetGlobalLockTimeout(time.Second, func(dur time.Duration, file string, line int) {
 		go func() {
 			str := fmt.Sprintf("rwmutex hangs: %s at %s:%d", dur.String(), file, line)
 			fmt.Printf("detected: %s\n", str)
@@ -34,46 +34,52 @@ func TestDeadlockDetection(t *testing.T) {
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
-		mu1.Lock()
+		goid := GetGoroutineId()
+
+		mu1.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu2.Lock()
-		mu2.Unlock()
-		mu1.Unlock()
+		mu2.Lock(goid)
+		mu2.Unlock(goid)
+		mu1.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu2.Lock()
+		mu2.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu3.Lock()
-		mu3.Unlock()
-		mu2.Unlock()
+		mu3.Lock(goid)
+		mu3.Unlock(goid)
+		mu2.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu3.Lock()
+		mu3.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu1.Lock() // << panics here
-		mu1.Unlock()
-		mu3.Unlock()
+		mu1.Lock(goid) // << panics here
+		mu1.Unlock(goid)
+		mu3.Unlock(goid)
 	}()
 
 	time.Sleep(time.Second * 2)
@@ -87,12 +93,12 @@ func TestDeadlockDetection(t *testing.T) {
 }
 
 func TestDeadlockDetection2(t *testing.T) {
-	var mu1, mu2, mu3 deadlock.RWMutex
+	var mu1, mu2, mu3 RWMutex
 
 	pan := make(chan interface{})
 	done := false
 
-	deadlock.SetGlobalLockTimeout(time.Second*5, func(dur time.Duration, file string, line int) {
+	SetGlobalLockTimeout(time.Second*5, func(dur time.Duration, file string, line int) {
 		if !done {
 			t.Fatal("should not be triggered")
 		}
@@ -109,46 +115,51 @@ func TestDeadlockDetection2(t *testing.T) {
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
+		goid := GetGoroutineId()
 
-		mu1.Lock()
+		mu1.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu2.Lock()
-		mu2.Unlock()
-		mu1.Unlock()
+		mu2.Lock(goid)
+		mu2.Unlock(goid)
+		mu1.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu2.Lock()
+		mu2.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu3.Lock()
-		mu3.Unlock()
-		mu2.Unlock()
+		mu3.Lock(goid)
+		mu3.Unlock(goid)
+		mu2.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu3.Lock()
+		mu3.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu1.Lock() // << panics here
-		mu1.Unlock()
-		mu3.Unlock()
+		mu1.Lock(goid) // << panics here
+		mu1.Unlock(goid)
+		mu3.Unlock(goid)
 	}()
 
 	time.Sleep(time.Second * 2)
@@ -162,11 +173,11 @@ func TestDeadlockDetection2(t *testing.T) {
 }
 
 func TestDeadlockDetection3(t *testing.T) {
-	var mu1, mu2, mu3 deadlock.RWMutex
+	var mu1, mu2, mu3 RWMutex
 
 	pan := make(chan interface{})
 
-	deadlock.SetGlobalLockTimeout(time.Second, func(dur time.Duration, file string, line int) {
+	SetGlobalLockTimeout(time.Second, func(dur time.Duration, file string, line int) {
 		go func() {
 			str := fmt.Sprintf("rwmutex hangs: %s at %s:%d", dur.String(), file, line)
 			fmt.Printf("detected: %s\n", str)
@@ -180,46 +191,52 @@ func TestDeadlockDetection3(t *testing.T) {
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
-		mu1.Lock()
+		goid := GetGoroutineId()
+
+		mu1.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu2.Lock()
-		mu2.Unlock()
-		mu1.Unlock()
+		mu2.Lock(goid)
+		mu2.Unlock(goid)
+		mu1.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu2.Lock()
+		mu2.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu3.Lock()
-		mu3.Unlock()
-		mu2.Unlock()
+		mu3.Lock(goid)
+		mu3.Unlock(goid)
+		mu2.Unlock(goid)
 	}()
 
 	go func() {
 		defer func() {
-			if r := recover(); r == nil {
+			if r := recover(); r != nil {
 				pan <- r
 			}
 		}()
 
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu3.Lock()
+		mu3.Lock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu1.Lock() // << panics here
-		mu1.Unlock()
-		mu3.Unlock()
+		mu1.Lock(goid) // << panics here
+		mu1.Unlock(goid)
+		mu3.Unlock(goid)
 	}()
 
 	time.Sleep(time.Second * 2)
@@ -233,7 +250,7 @@ func TestDeadlockDetection3(t *testing.T) {
 }
 
 func TestDoubleLock(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -243,12 +260,12 @@ func TestDoubleLock(t *testing.T) {
 		}
 	}()
 
-	mu.Lock()
-	mu.Lock()
+	mu.Lock(1)
+	mu.Lock(1)
 }
 
 func TestRecursiveLocks(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -258,15 +275,15 @@ func TestRecursiveLocks(t *testing.T) {
 		}
 	}()
 
-	mu.Lock()
-	mu.Lock()
+	mu.Lock(1)
+	mu.Lock(1)
 
-	mu.Unlock()
-	mu.Unlock()
+	mu.Unlock(1)
+	mu.Unlock(1)
 }
 
 func TestComboLocks1(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -276,15 +293,15 @@ func TestComboLocks1(t *testing.T) {
 		}
 	}()
 
-	mu.Lock()
-	mu.RLock()
+	mu.Lock(1)
+	mu.RLock(1)
 
-	mu.RUnlock()
-	mu.Unlock()
+	mu.RUnlock(1)
+	mu.Unlock(1)
 }
 
 func TestComboLocks2(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -294,82 +311,101 @@ func TestComboLocks2(t *testing.T) {
 		}
 	}()
 
-	mu.RLock()
-	mu.Lock()
+	mu.RLock(1)
+	mu.Lock(1)
 
-	mu.Unlock()
-	mu.RUnlock()
+	mu.Unlock(1)
+	mu.RUnlock(1)
 }
 
 func TestConcurrentLocks(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 	var wg sync.WaitGroup
+
 	var counter int
+	cntm := 0
 
-	wg.Add(100)
-
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		cntm++
 		go func() {
+			goid := GetGoroutineId()
+
 			defer wg.Done()
-			mu.Lock()
+			mu.Lock(goid)
 			counter++
-			mu.Unlock()
+			mu.Unlock(goid)
 		}()
 	}
 
 	wg.Wait()
 
-	if counter != 100 {
+	if counter != cntm {
 		t.Fatalf("expected counter to be 100, but got %d", counter)
 	}
 }
 
 func TestConcurrentRLocks(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 	var wg sync.WaitGroup
-	var counter int
+	var counter int32
+	cntm := int32(0)
 
-	wg.Add(100)
-
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		cntm++
 		go func() {
 			defer wg.Done()
-			mu.Lock()
-			counter++
-			mu.Unlock()
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("expected no deadlock panic, but got: %v", r)
+				}
+			}()
+
+			goid := GetGoroutineId()
+
+			mu.RLock(goid)
+			atomic.AddInt32(&counter, 1)
+			mu.RUnlock(goid)
 		}()
 	}
 
 	wg.Wait()
 
-	if counter != 100 {
+	if counter != cntm {
 		t.Fatalf("expected counter to be 100, but got %d", counter)
 	}
 }
 
 func TestDeadlockDetectionOnRLock(t *testing.T) {
-	var mu1, mu2 deadlock.RWMutex
+	var mu1, mu2 RWMutex
 	var wg sync.WaitGroup
 
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		mu1.RLock()
+
+		goid := GetGoroutineId()
+
+		mu1.RLock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu2.RLock()
-		mu2.RUnlock()
-		mu1.RUnlock()
+		mu2.RLock(goid)
+		mu2.RUnlock(goid)
+		mu1.RUnlock(goid)
 	}()
 
 	go func() {
 		defer wg.Done()
+		goid := GetGoroutineId()
+
 		time.Sleep(250 * time.Millisecond)
-		mu2.RLock()
+		mu2.RLock(goid)
 		time.Sleep(500 * time.Millisecond)
-		mu1.RLock()
-		mu1.RUnlock()
-		mu2.RUnlock()
+		mu1.RLock(goid)
+		mu1.RUnlock(goid)
+		mu2.RUnlock(goid)
 	}()
 
 	// Expect a panic due to deadlock
@@ -383,33 +419,40 @@ func TestDeadlockDetectionOnRLock(t *testing.T) {
 }
 
 func TestMixedLocks(t *testing.T) {
-	var mu deadlock.RWMutex
+	var mu RWMutex
 	var wg sync.WaitGroup
 	var counter int
+	cntm := 0
 
-	wg.Add(200)
-
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		cntm++
 		go func() {
 			defer wg.Done()
-			mu.Lock()
+			goid := GetGoroutineId()
+
+			mu.Lock(goid)
 			counter++
-			mu.Unlock()
+			mu.Unlock(goid)
 		}()
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		cntm++
 		go func() {
 			defer wg.Done()
-			mu.Lock()
+			goid := GetGoroutineId()
+
+			mu.Lock(goid)
 			counter++
-			mu.Unlock()
+			mu.Unlock(goid)
 		}()
 	}
 
 	wg.Wait()
 
-	if counter != 200 {
+	if counter != cntm {
 		t.Fatalf("expected counter to be 200, but got %d", counter)
 	}
 }

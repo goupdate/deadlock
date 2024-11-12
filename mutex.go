@@ -5,15 +5,15 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/petermattis/goid"
+	// "github.com/petermattis/goid"
 )
 
 type lockInfo struct {
 	sync.Mutex
 
-	goid int64 // if locked or locked, stores goroutine's id (goid)
+	goid GoroutineID // if locked or locked, stores goroutine's id (goid)
 	file string
 	line int
 
@@ -137,8 +137,8 @@ func (m *RWMutex) LastLocker() (string, int, time.Duration) {
 }
 
 // Lock method with deadlock detection and timeout handling
-func (m *RWMutex) Lock() {
-	goid := goid.Get()
+func (m *RWMutex) Lock(goid GoroutineID) {
+	//goid := goid.Get()
 	file, line := getCaller()
 
 	// forbid Lock() after Lock() in same goroutine
@@ -166,16 +166,15 @@ func (m *RWMutex) Lock() {
 }
 
 // Unlock method
-func (m *RWMutex) Unlock() {
-	goid := goid.Get()
-
-	m.RWMutex.Unlock()
+func (m *RWMutex) Unlock(goid GoroutineID) {
+	//	goid := goid.Get()
 	m.wlockInfo.Delete(goid)
+	m.RWMutex.Unlock()
 }
 
 // RLock method with deadlock detection and timeout handling
-func (m *RWMutex) RLock() {
-	goid := goid.Get()
+func (m *RWMutex) RLock(goid GoroutineID) {
+	//goid := goid.Get()
 	file, line := getCaller()
 
 	// forbid RLock() after Lock() in same goroutine
@@ -196,11 +195,11 @@ func (m *RWMutex) RLock() {
 }
 
 // RUnlock method
-func (m *RWMutex) RUnlock() {
-	goid := goid.Get()
+func (m *RWMutex) RUnlock(goid GoroutineID) {
+	//goid := goid.Get()
 
-	m.RWMutex.RUnlock()
 	m.rlockInfo.Delete(goid)
+	m.RWMutex.RUnlock()
 }
 
 // SetLockTimeout sets the lock timeout and handler for an instance of RWMutex
@@ -227,4 +226,12 @@ func GetGlobalLockTimeout() time.Duration {
 	mu.Lock()
 	defer mu.Unlock()
 	return lockTimeout
+}
+
+type GoroutineID int64
+
+var lastId int64 = 1
+
+func GetGoroutineId() GoroutineID {
+	return GoroutineID(atomic.AddInt64(&lastId, 1))
 }
