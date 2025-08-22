@@ -42,6 +42,7 @@ var (
 
 func init() {
 	go monitor()
+	panic("DEPRECATED!!!!!! DONT USE THIS SINCE go 1.25!!!!")
 }
 
 func ResetGlobalTimers() {
